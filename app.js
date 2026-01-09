@@ -18,6 +18,45 @@ function setStatus(message, tone = "muted") {
   statusEl.dataset.tone = tone;
 }
 
+function loadJsonp(url, timeoutMs = 12000) {
+  return new Promise((resolve, reject) => {
+    const callbackName = `__sheetCallback_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const script = document.createElement("script");
+    let finished = false;
+
+    function cleanup() {
+      finished = true;
+      delete window[callbackName];
+      script.remove();
+    }
+
+    window[callbackName] = (payload) => {
+      cleanup();
+      resolve(payload);
+    };
+
+    script.onerror = () => {
+      if (finished) {
+        return;
+      }
+      cleanup();
+      reject(new Error("Load failed"));
+    };
+
+    const joiner = url.includes("?") ? "&" : "?";
+    script.src = `${url}${joiner}action=get&callback=${callbackName}`;
+    document.body.appendChild(script);
+
+    window.setTimeout(() => {
+      if (finished) {
+        return;
+      }
+      cleanup();
+      reject(new Error("Load timed out"));
+    }, timeoutMs);
+  });
+}
+
 function normalizeValue(value) {
   if (value === null || value === undefined) {
     return "";
@@ -107,16 +146,7 @@ async function loadData() {
   setStatus("Loading sheet...");
 
   try {
-    const response = await fetch(`${SCRIPT_URL}?action=get`, {
-      method: "GET",
-      redirect: "follow",
-    });
-
-    if (!response.ok) {
-      throw new Error(`Request failed: ${response.status}`);
-    }
-
-    const payload = await response.json();
+    const payload = await loadJsonp(SCRIPT_URL);
 
     if (payload.error) {
       throw new Error(payload.error);
@@ -131,7 +161,9 @@ async function loadData() {
     buildTable();
   } catch (error) {
     setStatus("Failed to load data", "warn");
-    emptyEl.textContent = `Could not load data: ${error.message}`;
+    emptyEl.textContent =
+      `Could not load data: ${error.message}. ` +
+      "Open the Apps Script URL in a new tab to authorize, then reload.";
     tableWrap.innerHTML = "";
     tableWrap.appendChild(emptyEl);
   }
@@ -149,8 +181,9 @@ async function saveData() {
   try {
     const response = await fetch(SCRIPT_URL, {
       method: "POST",
+      mode: "no-cors",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "text/plain;charset=utf-8",
       },
       body: JSON.stringify({
         action: "update",
@@ -160,20 +193,21 @@ async function saveData() {
       redirect: "follow",
     });
 
-    if (!response.ok) {
-      throw new Error(`Save failed: ${response.status}`);
-    }
-
-    const payload = await response.json();
-    if (payload.error) {
-      throw new Error(payload.error);
+    if (response.type !== "opaque") {
+      if (!response.ok) {
+        throw new Error(`Save failed: ${response.status}`);
+      }
+      const payload = await response.json();
+      if (payload.error) {
+        throw new Error(payload.error);
+      }
     }
 
     state.dirty = false;
     document.querySelectorAll(".cell[data-dirty='true']").forEach((cell) => {
       cell.dataset.dirty = "false";
     });
-    setStatus("Saved.");
+    setStatus("Saved. Reload to confirm.");
   } catch (error) {
     setStatus("Save failed", "warn");
   }
