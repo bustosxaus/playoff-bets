@@ -5,13 +5,14 @@ const tableWrap = document.getElementById("table-wrap");
 const emptyEl = document.getElementById("empty");
 const saveBtn = document.getElementById("save");
 const reloadBtn = document.getElementById("reload");
-const addRowBtn = document.getElementById("add-row");
 
 const state = {
   columns: [],
   rows: [],
   dirty: false,
 };
+
+const lockedColumns = new Set(["Cumulative Balance", "Status Message"]);
 
 function setStatus(message, tone = "muted") {
   statusEl.textContent = message;
@@ -108,21 +109,27 @@ function buildTable() {
   state.rows.forEach((row, rowIndex) => {
     const tr = document.createElement("tr");
     state.columns.forEach((_, colIndex) => {
+      const columnName = state.columns[colIndex];
+      const isLocked = lockedColumns.has(columnName);
       const td = document.createElement("td");
       const cell = document.createElement("div");
-      cell.className = "cell";
-      cell.contentEditable = "true";
+      cell.className = isLocked ? "cell locked" : "cell";
+      cell.contentEditable = isLocked ? "false" : "true";
       cell.dataset.row = String(rowIndex);
       cell.dataset.col = String(colIndex);
       cell.textContent = normalizeValue(row[colIndex]);
 
-      cell.addEventListener("input", (event) => {
-        const target = event.currentTarget;
-        const r = Number(target.dataset.row);
-        const c = Number(target.dataset.col);
-        state.rows[r][c] = target.textContent;
-        markDirty(target);
-      });
+      if (isLocked) {
+        cell.title = "Formula-driven column";
+      } else {
+        cell.addEventListener("input", (event) => {
+          const target = event.currentTarget;
+          const r = Number(target.dataset.row);
+          const c = Number(target.dataset.col);
+          state.rows[r][c] = target.textContent;
+          markDirty(target);
+        });
+      }
 
       td.appendChild(cell);
       tr.appendChild(td);
@@ -213,20 +220,7 @@ async function saveData() {
   }
 }
 
-function addRow() {
-  if (!state.columns.length) {
-    return;
-  }
-
-  const emptyRow = state.columns.map(() => "");
-  state.rows.push(emptyRow);
-  buildTable();
-  state.dirty = true;
-  setStatus("Row added. Save changes.");
-}
-
 saveBtn.addEventListener("click", saveData);
 reloadBtn.addEventListener("click", loadData);
-addRowBtn.addEventListener("click", addRow);
 
 loadData();

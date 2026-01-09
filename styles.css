@@ -182,6 +182,16 @@ main {
   background: white;
 }
 
+.cell.locked {
+  background: rgba(30, 26, 22, 0.05);
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.cell.locked:focus {
+  border-color: transparent;
+}
+
 .cell[data-dirty="true"] {
   border-color: rgba(255, 122, 47, 0.7);
   background: rgba(255, 122, 47, 0.1);
